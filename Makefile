@@ -33,7 +33,8 @@ src/%.o: src/%.c src/q4.h
 src/q4_rocm.o: src/q4_rocm.cu src/q4.h
 	$(HIPCC) $(HIPFLAGS) -c -o $@ $<
 
-MODEL ?= models/IQ3E-Q8D-MTP/Qwen3.8-Flash-Next-IQ3E-Q8D-MTP.gguf
+MODEL_NAME := IQ3E-Q8D-MTP/Qwen3.8-Flash-Next-IQ3E-Q8D-MTP.gguf
+MODEL ?= $(firstword $(wildcard models/$(MODEL_NAME) ../models/$(MODEL_NAME)) models/$(MODEL_NAME))
 
 test: q4-test
 	./q4-test

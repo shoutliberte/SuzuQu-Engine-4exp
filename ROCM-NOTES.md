@@ -2,7 +2,9 @@
 
 Companion to DESIGN.md. What an RDNA3 consumer GPU is, what ROCm does to qwen4exp,
 and what the optimization work so far measured. Numbers are RX 7900 XTX +
-ROCm 7.2.4 (HIP clang 22), `--offload-arch=gfx1100`.
+ROCm 7.2.4 (HIP clang 22), `--offload-arch=gfx1100`. References to
+MODEL-STRATEGY.md / QUANT-ESTIMATE.md / RDNA3-OPT.md point at unpublished
+working notes; their conclusions are summarized inline here.
 
 ## Machine facts that shape everything
 

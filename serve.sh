@@ -2,7 +2,16 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-MODEL=${Q4_MODEL:-"/home/shoutliberte/Projects/models/IQ3E-Q8D-MTP/Qwen3.8-Flash-Next-IQ3E-Q8D-MTP.gguf"}
+MODEL=${Q4_MODEL:-}
+if [ -z "$MODEL" ]; then
+    # download_q4.sh installs into ./models; a sibling models/ next to the
+    # repo is also picked up.
+    for _m in "$ROOT/models/IQ3E-Q8D-MTP/Qwen3.8-Flash-Next-IQ3E-Q8D-MTP.gguf" \
+              "$ROOT/../models/IQ3E-Q8D-MTP/Qwen3.8-Flash-Next-IQ3E-Q8D-MTP.gguf"; do
+        if [ -e "$_m" ]; then MODEL=$_m; break; fi
+    done
+    MODEL=${MODEL:-"$ROOT/models/IQ3E-Q8D-MTP/Qwen3.8-Flash-Next-IQ3E-Q8D-MTP.gguf"}
+fi
 # Train length. QSA attends a fixed 2051 positions, so prefill stays near
 # 60 tok/s as the cache grows (measured through 90K). OpenCode compaction
 # is the practical window inside this allocation. See DESIGN.md.
@@ -12,9 +21,10 @@ PORT=${Q4_PORT:-8090}
 HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES:-0}
 export HIP_VISIBLE_DEVICES
 
-# IQ3E on this PC (RX 7900 XTX 24 GiB / 60 GiB RAM / 990 PRO).
+# Defaults tuned on the reference box (RX 7900 XTX 24 GiB / 60 GiB RAM /
+# NVMe); every value below is an env override for a different budget.
 # Routed experts are one 45.29 GiB DRAM image. PLE stays on SSD.
-# Do not run two q4 processes. Do not browse heavy tabs while it runs.
+# Do not run two q4 processes. Keep other heavy memory use closed while it runs.
 # 4 GiB stays free for the desktop session. Do not lower it.
 # A 10 GiB floor refused residency whenever available RAM was under 55 GiB.
 Q4_EXPERT_RESIDENT=${Q4_EXPERT_RESIDENT:-1}
@@ -32,11 +42,13 @@ Q4_VRAM_RESERVE_GIB=${Q4_VRAM_RESERVE_GIB:-2}
 export Q4_EXPERT_RESIDENT Q4_L2_GIB Q4_DRAM_RESERVE_GIB Q4_MLOCK_L2 Q4_KV
 export Q4_L1_SLOTS Q4_IO_THREADS Q4_PIN_ARENA Q4_VRAM_RESERVE_GIB
 
-# Pinned set drives partial-resident fill order. The route profile
-# (collected over 9000 tok of mixed ja/en/code evals) matches this
-# model's actual routing; the old ja-experts.warm was a UD-Q4 set and
-# does not match.
-Q4_WARM_FILE=${Q4_WARM_FILE:-$ROOT/../models/IQ3E-Q8D-MTP/route-prof-iq3e.warm}
+# Pinned set drives partial-resident fill order. A route profile collected
+# with Q4_ROUTE_PROF (saved next to the model) is picked up automatically;
+# a stale warm file from another model is rejected by the loader anyway.
+if [ -z "${Q4_WARM_FILE:-}" ]; then
+    _warm=$(dirname "$MODEL")/route-prof-iq3e.warm
+    [ -f "$_warm" ] && Q4_WARM_FILE=$_warm
+fi
 Q4_SESS_CACHE=${Q4_SESS_CACHE:-$ROOT/session.cache}
 # CPU expert pool width. 9950X3D has 16 cores; the pool idles between
 # tokens (bounded spin -> futex), so 16 does not starve the desktop.
@@ -57,7 +69,7 @@ Q4_THINK=${Q4_THINK:-1}
 Q4_SHOW_THINKING=${Q4_SHOW_THINKING:-1}
 Q4_MAX_NEW=${Q4_MAX_NEW:-32768}
 # MTP stays off. The embedded draft block works via a head GGUF extracted
-# with scripts/mtp-extract.py (e.g. ~/Projects/models/IQ3E-Q8D-MTP/mtp-head.gguf):
+# with scripts/mtp-extract.py (e.g. models/IQ3E-Q8D-MTP/mtp-head.gguf):
 #   Q4_MTP=<head.gguf> Q4_KV=f32 [Q4_MTP_SLOTS=128..512] [Q4_MTP_N=1..3]
 # Measured: draft acceptance ~85-89%, mean len ~3.6 — but decode lands at
 # ~18 t/s vs ~43 plain. The verify batch re-reads routed experts for every
